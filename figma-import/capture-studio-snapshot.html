@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; background: #fafafa; color: #09090b; }
+  .page { width: 1280px; margin: 0 auto; padding: 24px 32px 64px; background: linear-gradient(#fafafa, #e4e4e7); }
+  .header { display: flex; justify-content: space-between; align-items: center; }
+  .brand { display: flex; gap: 12px; align-items: center; }
+  .logo { width: 40px; height: 40px; border-radius: 14px; background: #18181b; color: #fff; font-size: 20px; text-align: center; line-height: 40px; }
+  .brand-name { font-size: 16px; font-weight: 700; }
+  .brand-sub { font-size: 12px; color: #71717a; }
+  .header-actions { display: flex; gap: 8px; align-items: center; }
+  .sec-btn { border: none; background: #f4f4f5; border-radius: 8px; padding: 8px 12px; font-size: 12px; font-weight: 600; color: #18181b; }
+  .help-btn { width: 40px; height: 40px; border-radius: 999px; border: 1px solid #e4e4e7; background: #fff; font-size: 20px; font-weight: 700; color: #18181b; text-align: center; line-height: 38px; }
+  .toggle-wrap { text-align: center; margin-top: 24px; }
+  .toggle { display: inline-block; background: #fff; border: 1px solid #e4e4e7; border-radius: 16px; padding: 4px; }
+  .seg { display: inline-block; width: 190px; height: 40px; line-height: 40px; font-size: 14px; font-weight: 600; border-radius: 12px; }
+  .seg-active { background: #18181b; color: #fff; }
+  .seg-idle { color: #71717a; }
+  .toggle-cap { font-size: 12px; color: #71717a; margin-top: 12px; }
+  .stage { margin-top: 24px; border: 1px solid #e4e4e7; border-radius: 16px; overflow: hidden; background: #fff; }
+  .viewport { position: relative; height: 620px; background: #09090b; }
+  .cam-label { position: absolute; top: 200px; width: 100%; text-align: center; color: #52525b; font-size: 14px; }
+  .badge { position: absolute; top: 16px; left: 16px; background: rgba(0,0,0,0.5); color: #e4e4e7; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 6px 12px; }
+  .badge-dot { display: inline-block; width: 8px; height: 8px; border-radius: 999px; background: #a1a1aa; margin-right: 6px; }
+  .corner-btns { position: absolute; top: 16px; right: 16px; }
+  .corner-btn { display: inline-block; width: 32px; height: 32px; border-radius: 999px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2); color: #fff; font-size: 14px; text-align: center; line-height: 30px; margin-left: 8px; }
+  .overlay { position: absolute; top: 150px; left: 388px; width: 420px; border-radius: 16px; background: rgba(24,24,27,0.55); border: 1px solid rgba(255,255,255,0.25); }
+  .overlay-bar { padding: 8px 16px; border-bottom: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.6); font-size: 11px; font-weight: 700; letter-spacing: 2px; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 999px; margin-right: 6px; }
+  .overlay-title { display: inline-block; margin-left: 90px; }
+  .overlay-close { float: right; color: rgba(255,255,255,0.6); font-size: 16px; }
+  .overlay-body { padding: 12px 16px 16px; color: rgba(255,255,255,0.9); font-size: 14px; line-height: 1.6; }
+  .transport { position: absolute; bottom: 0; left: 0; right: 0; padding: 40px 16px 16px; background: linear-gradient(transparent, rgba(0,0,0,0.7)); }
+  .record-btn { display: inline-block; background: #dc2626; color: #fff; font-size: 16px; font-weight: 700; border-radius: 999px; padding: 12px 24px; }
+  .retry-btn { display: inline-block; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); color: #fff; font-size: 12px; font-weight: 600; border-radius: 8px; padding: 8px 12px; margin-left: 8px; }
+  .meter { float: right; margin-top: 16px; color: rgba(255,255,255,0.7); font-size: 12px; }
+  .meter-track { display: inline-block; width: 112px; height: 6px; border-radius: 999px; background: rgba(255,255,255,0.2); vertical-align: middle; margin-left: 8px; }
+  .meter-fill { display: block; width: 40%; height: 6px; border-radius: 999px; background: #34d399; }
+  .cards { display: flex; gap: 16px; margin-top: 24px; }
+  .card { flex: 1; background: #fff; border: 1px solid #e4e4e7; border-radius: 16px; padding: 24px; }
+  .card-title { font-size: 14px; font-weight: 700; }
+  .card-desc { font-size: 14px; color: #71717a; margin-top: 6px; }
+  .slider-row { margin-top: 16px; }
+  .slider-track { position: relative; height: 6px; border-radius: 999px; background: #e4e4e7; }
+  .slider-fill { position: absolute; left: 0; top: 0; height: 6px; width: 55%; border-radius: 999px; background: #18181b; }
+  .slider-thumb { position: absolute; top: -7px; left: 55%; width: 20px; height: 20px; border-radius: 999px; background: #fff; border: 2px solid #18181b; }
+  .slider-val { float: right; font-size: 14px; font-weight: 600; margin-top: 8px; }
+  .takes-head { font-size: 16px; font-weight: 700; margin: 32px 0 12px; }
+  .takes-empty { background: #fff; border: 1px solid #e4e4e7; border-radius: 16px; padding: 40px; text-align: center; }
+  .takes-empty-title { font-size: 14px; font-weight: 600; margin-top: 8px; }
+  .takes-empty-desc { font-size: 12px; color: #71717a; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <div class="brand">
+      <div class="logo">≋</div>
+      <div><div class="brand-name">Capture Studio</div><div class="brand-sub">Video &amp; voice recorder</div></div>
+    </div>
+    <div class="header-actions"><span class="sec-btn">Review transcript</span><div class="help-btn">?</div></div>
+  </div>
+  <div class="toggle-wrap">
+    <div class="toggle"><span class="seg seg-active">▣ Video</span><span class="seg seg-idle">◉ Voice</span></div>
+    <div class="toggle-cap">Camera + microphone · stored locally</div>
+  </div>
+  <div class="stage">
+    <div class="viewport">
+      <div class="cam-label">▣<br><br>Camera preview will appear here</div>
+      <div class="badge"><span class="badge-dot"></span>PREVIEW</div>
+      <div class="corner-btns"><span class="corner-btn">◉</span><span class="corner-btn">↻</span></div>
+      <div class="overlay">
+        <div class="overlay-bar"><span class="dot" style="background:#f87171"></span><span class="dot" style="background:#fcd34d"></span><span class="dot" style="background:#34d399"></span><span class="overlay-title">LIVE NOTE</span><span class="overlay-close">×</span></div>
+        <div class="overlay-body">Welcome to your recording session.<br>This floating note stays on top while you record — edit me, drag me around, or tune my transparency with the slider below.</div>
+      </div>
+      <div class="transport">
+        <span class="record-btn">● Record</span><span class="retry-btn">Retry camera</span>
+        <span class="meter">◉ <span class="meter-track"><span class="meter-fill"></span></span></span>
+      </div>
+    </div>
+  </div>
+  <div class="cards">
+    <div class="card">
+      <div class="card-title">Overlay opacity</div>
+      <div class="card-desc">How see-through the floating note window is.</div>
+      <div class="slider-row"><div class="slider-track"><div class="slider-fill"></div><div class="slider-thumb"></div></div><div class="slider-val">55%</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Meter boost</div>
+      <div class="card-desc">Visual boost for the mic meter. Mic input itself is unchanged.</div>
+      <div class="slider-row"><div class="slider-track"><div class="slider-fill" style="width:45%"></div><div class="slider-thumb" style="left:45%"></div></div><div class="slider-val">100%</div></div>
+    </div>
+  </div>
+  <div class="takes-head">Takes (0)</div>
+  <div class="takes-empty">
+    <div style="font-size:28px;color:#d4d4d8">▣</div>
+    <div class="takes-empty-title">No takes yet</div>
+    <div class="takes-empty-desc">Hit Record, perform your take, then press Stop. It will show up here with playback and download.</div>
+  </div>
+</div>
+</body>
+</html>

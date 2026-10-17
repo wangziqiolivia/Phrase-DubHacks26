@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; background: #fafafa; color: #09090b; }
+  .page { width: 1280px; min-height: 900px; margin: 0 auto; background: linear-gradient(#fafafa, #e4e4e7); }
+  .header { padding: 20px 32px; border-bottom: 1px solid #e4e4e7; background: rgba(250,250,250,0.9); }
+  .row { display: flex; justify-content: space-between; align-items: flex-start; }
+  .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #71717a; text-transform: uppercase; }
+  .title { font-size: 28px; font-weight: 700; margin-top: 8px; }
+  .exit { border: 1px solid #e4e4e7; background: #fff; border-radius: 12px; padding: 10px 16px; font-size: 14px; font-weight: 600; }
+  .controls { margin-top: 16px; display: flex; justify-content: space-between; }
+  .filter { background: #fff; border: 1px solid #e4e4e7; border-radius: 16px; padding: 4px; }
+  .f { display: inline-block; padding: 8px 16px; font-size: 14px; font-weight: 600; border-radius: 12px; }
+  .f-on { background: #18181b; color: #fff; }
+  .f-off { color: #52525b; }
+  .size { font-size: 12px; color: #71717a; }
+  .size-btns { display: inline-block; margin-left: 8px; background: #fff; border: 1px solid #e4e4e7; border-radius: 12px; padding: 2px; }
+  .sz { display: inline-block; width: 36px; text-align: center; padding: 6px 0; font-weight: 700; border-radius: 8px; }
+  .sz-on { background: #18181b; color: #fff; }
+  main { padding: 24px 32px 48px; max-width: 768px; margin: 0 auto; }
+  .card { background: #fff; border: 1px solid #e4e4e7; border-radius: 16px; padding: 20px; margin-bottom: 12px; }
+  .card-warn { background: #fffbeb; border-color: #fde68a; }
+  .meta { display: flex; justify-content: space-between; font-size: 12px; color: #71717a; margin-bottom: 8px; }
+  .pill { background: #fef3c7; color: #78350f; font-weight: 700; padding: 2px 8px; border-radius: 999px; font-size: 11px; }
+  .body { font-size: 16px; line-height: 1.6; }
+  .fix { margin-top: 12px; padding-top: 12px; border-top: 1px solid #fde68a; font-size: 14px; color: #52525b; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <div class="row">
+      <div><div class="eyebrow">Transcript review</div><div class="title">Morning standup — Oct 17</div></div>
+      <div class="exit">← Exit</div>
+    </div>
+    <div class="controls">
+      <div class="filter"><span class="f f-on">Full transcript</span><span class="f f-off">Only mistakes (3)</span></div>
+      <div class="size">Text size <span class="size-btns"><span class="sz">S</span><span class="sz sz-on">M</span><span class="sz">L</span></span></div>
+    </div>
+  </div>
+  <main>
+    <div class="card"><div class="meta"><span>0:04</span></div><div class="body">Good morning everyone, thanks for joining the standup.</div></div>
+    <div class="card card-warn"><div class="meta"><span>0:22</span><span class="pill">Mistake</span></div><div class="body">Today I'll work on the recoding studio page and the transcript review.</div><div class="fix">Suggested: <strong>recording</strong></div></div>
+    <div class="card card-warn"><div class="meta"><span>0:39</span><span class="pill">Mistake</span></div><div class="body">There's one blocker on the API — the endpoint returns 500 intermitantly.</div><div class="fix">Suggested: <strong>intermittently</strong></div></div>
+  </main>
+</div>
+</body>
+</html>

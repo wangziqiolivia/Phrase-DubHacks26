@@ -1,0 +1,72 @@
+{
+  "name": "Capture Studio — design tokens (exported from code for Figma import)",
+  "source": "Exported from the Capture Studio Next.js + Tailwind codebase. Use with the html.to.design Figma plugin (import the running page), or create Figma styles from the values below.",
+  "colors": {
+    "background-page-top": "#FAFAFA",
+    "background-page-bottom": "#E4E4E7",
+    "surface": "#FFFFFF",
+    "surface-border": "#E4E4E7",
+    "ink": "#09090B",
+    "ink-primary": "#18181B",
+    "muted": "#71717A",
+    "record": "#DC2626",
+    "record-hover": "#EF4444",
+    "live-accent": "#34D399",
+    "stage": "#09090B",
+    "overlay-panel": "#18181B",
+    "overlay-border": "rgba(255,255,255,0.25)",
+    "overlay-divider": "rgba(255,255,255,0.10)"
+  },
+  "typography": {
+    "family": "Geist Sans (fallback: Arial, Helvetica, sans-serif)",
+    "app-title": { "size": 16, "weight": 600, "tracking": "tight" },
+    "app-subtitle": { "size": 12, "weight": 400, "color": "muted" },
+    "section-heading": { "size": 16, "weight": 600, "tracking": "tight" },
+    "card-title": { "size": 14, "weight": 600 },
+    "card-description": { "size": 14, "weight": 400, "color": "muted" },
+    "overlay-text": { "size": 14, "weight": 400, "lineHeight": 1.6, "color": "rgba(255,255,255,0.9)" }
+  },
+  "radius": {
+    "card": 16,
+    "button": 12,
+    "button-pill": 999,
+    "toggle": 16,
+    "overlay": 16
+  },
+  "shadows": {
+    "record-button": "large soft red glow (red-600 at 30% opacity)",
+    "overlay-panel": "2xl (floating, above stage)"
+  },
+  "layout": {
+    "page-max-width": 1152,
+    "stage-aspect": "16 / 9",
+    "overlay-width": "min(90%, 26rem), centered, draggable",
+    "toggle-width": "max 24rem, 2-column segmented"
+  },
+  "components": [
+    {
+      "name": "Mode toggle (Video / Voice)",
+      "spec": "2-column segmented control; container white with zinc-200 border, radius 16, padding 4; active segment zinc-900 fill + white text + shadow; inactive zinc-500 text, hover zinc-100."
+    },
+    {
+      "name": "Help (?) button",
+      "spec": "Outline circular icon button (40x40), opens modal dialog (max-width 28rem, radius 16) with title, description, and bullet list."
+    },
+    {
+      "name": "Sliders (Overlay opacity, Meter boost)",
+      "spec": "Radix slider: 6px zinc-200 track, zinc-900 fill range, 20px white thumb with 2px zinc-900 border; numeric readout right-aligned tabular-nums."
+    },
+    {
+      "name": "Floating note window",
+      "spec": "Semi-transparent dark glass panel (zinc-900, backdrop-blur-xl, white/25 border, radius 16) floating centered over stage; title bar with traffic-light dots + 'LIVE NOTE' label + close ×; editable textarea body; drag by panel, opacity 15–100% via slider."
+    },
+    {
+      "name": "Transport bar",
+      "spec": "Bottom overlay gradient (black/70 → transparent); red pill Record/Stop button (48px height, radius full) + ghost 'Retry camera' button; mic level meter (112px track, white/20, emerald fill)."
+    },
+    {
+      "name": "Takes library",
+      "spec": "Responsive 2-col card grid; video takes render 16:9 player, voice takes render dark panel + audio element; footer row with metadata left, download + delete icon buttons right."
+    }
+  ]
+}
