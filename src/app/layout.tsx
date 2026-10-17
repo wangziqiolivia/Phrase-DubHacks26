@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Capture Studio — Video & Voice Recorder",
+  title: "lived — A language journal",
   description:
-    "A clean video and voice recording app with a mode toggle, floating note window, and local takes.",
+    "A quiet space to record everyday moments, practice a language, and revisit your words.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

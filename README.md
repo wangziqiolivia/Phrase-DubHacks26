@@ -1,19 +1,6 @@
-# Capture Studio
+# lived — A language journal
 
-A clean video + voice recording web app built with Next.js, Tailwind CSS v4, and shadcn-style UI kit components (Radix Slider + Dialog, CVA buttons, Lucide icons).
-
-## Features
-
-- **Main page** with a live recording stage
-- **Video mode** — camera preview + microphone recording via `MediaRecorder`
-- **Voice mode** — microphone-only with an animated waveform stage
-- **Toggle button** to switch between Video and Voice modes
-- **Help (?) button** in the header explaining how everything works
-- **Sliders** — overlay opacity + mic meter boost
-- **Semi-transparent floating window** over the stage with editable text (drag it anywhere, close/reopen, reset)
-- **Takes library** — playback, download, and delete, all stored locally in the browser
-
-> Note: I saw the `/add-plugin figma` prefix — there is no Figma plugin step available in this environment, so I built the UI directly in code with a Figma-clean aesthetic instead. If you connect a Figma file, I can match its tokens.
+A camera-and-transcript experience for capturing everyday moments while practicing a language. Built with Next.js, React, Tailwind CSS, and browser media APIs.
 
 ## Run locally
 
@@ -22,9 +9,16 @@ npm install
 npm run dev
 ```
 
-Open the printed localhost URL (e.g. http://localhost:3000).
+Open the localhost URL printed by Next.js. Camera and microphone access require browser permission and a secure context (`localhost` or HTTPS).
 
-## Notes
+## Current prototype
 
-- Camera/mic require browser permission and a secure context (`localhost` or HTTPS).
-- Recordings never leave the browser — no server upload.
+- Record video with audio or make a voice-only recording.
+- Pause, resume, replay, download, and delete recordings during the current browser session.
+- Use browser speech recognition for live transcription when the browser supports it.
+- Change the recognition language and choose how visible sample language feedback should be.
+- Review the sample inline correction by selecting its highlighted word.
+
+Live language feedback is illustrative sample content, not AI-generated. The app does not currently connect to an AI or transcription service, and browser speech recognition support varies. When speech recognition is unavailable, the recording still works and the interface explains that no transcript was captured.
+
+Recordings are held in memory for the current page session and are not uploaded or persisted after leaving the app.

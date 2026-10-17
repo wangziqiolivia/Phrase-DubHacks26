@@ -1,33 +1,46 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
-  Video,
-  Mic,
-  Circle,
-  Square,
-  Download,
-  Trash2,
-  HelpCircle,
+  AudioLines,
   AudioWaveform,
-  Eye,
-  EyeOff,
-  RotateCcw,
+  Check,
+  ChevronDown,
+  Circle,
+  CircleHelp,
+  Download,
+  Headphones,
+  Mic,
+  Pause,
   Play,
+  Radio,
+  RotateCcw,
+  Square,
+  Trash2,
+  Video,
+  Waves,
 } from "lucide-react";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { useRecording } from "@/context/recording-context";
+import { useRecording, type Mode } from "@/context/recording-context";
 import { cn, formatTime } from "@/lib/utils";
 
-const DEFAULT_OVERLAY_TEXT =
-  "Welcome to your recording session.\nThis floating note stays on top while you record — edit me, drag me around, or tune my transparency with the slider below.";
+const LANGUAGES = [
+  { name: "English", locale: "en-US" },
+  { name: "Spanish", locale: "es-ES" },
+  { name: "French", locale: "fr-FR" },
+  { name: "Japanese", locale: "ja-JP" },
+];
+
+const DEMO_FEEDBACK = {
+  original: "scenes",
+  correction: "scene",
+  explanation: "Because you used “a,” the noun should be singular here.",
+  tip: "“This is a beautiful view” sounds natural in this moment, too.",
+};
 
 export function RecorderStudio() {
-  const router = useRouter();
   const {
     mode,
     setMode,
@@ -46,457 +59,552 @@ export function RecorderStudio() {
     deleteRecording,
     clearRecordings,
     startPreview,
+    stopPreview,
+    updateRecordingTranscript,
   } = useRecording();
-
-  const [overlayVisible, setOverlayVisible] = useState(true);
-  const [overlayOpacity, setOverlayOpacity] = useState([55]);
-  const [overlayText, setOverlayText] = useState(DEFAULT_OVERLAY_TEXT);
-  const overlayRef = useRef<HTMLDivElement>(null);
-  const dragState = useRef({ dx: 0, dy: 0, dragging: false });
-  const [overlayPos, setOverlayPos] = useState({ x: 0, y: 0 });
+  const [language, setLanguage] = useState(LANGUAGES[0]);
+  const [feedbackLevel, setFeedbackLevel] = useState([1]);
+  const [transcript, setTranscript] = useState("");
+  const [interimTranscript, setInterimTranscript] = useState("");
+  const [speechNotice, setSpeechNotice] = useState<string | null>(null);
+  const [feedbackOpen, setFeedbackOpen] = useState<"correction" | "positive" | null>(null);
+  const [showDemo, setShowDemo] = useState(true);
+  const [expandedRecordingId, setExpandedRecordingId] = useState<string | null>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const recognitionActiveRef = useRef(false);
+  const transcriptRef = useRef("");
+  const wasRecordingRef = useRef(false);
+  const lastSavedRecordingRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!isRecording) void startPreview(mode);
-  }, [mode, isRecording, startPreview]);
+    if (isRecording && !wasRecordingRef.current) {
+      transcriptRef.current = "";
+      setTranscript("");
+      setInterimTranscript("");
+      setSpeechNotice(null);
+      setFeedbackOpen(null);
+      setShowDemo(false);
+    }
+    wasRecordingRef.current = isRecording;
+  }, [isRecording]);
 
-  const openAssistant = () => {
-    if (isRecording && !isPaused) pauseRecording();
-    router.push("/assistant");
-  };
+  useEffect(() => {
+    if (!isRecording || isPaused) {
+      recognitionActiveRef.current = false;
+      recognitionRef.current?.stop();
+      recognitionRef.current = null;
+      setInterimTranscript("");
+      return;
+    }
 
-  const onOverlayPointerDown = (e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest("textarea,button")) return;
-    dragState.current = {
-      dx: e.clientX - overlayPos.x,
-      dy: e.clientY - overlayPos.y,
-      dragging: true,
+    const Recognition =
+      window.SpeechRecognition ?? window.webkitSpeechRecognition;
+    if (!Recognition) {
+      setSpeechNotice(
+        "Live transcription isn't supported by this browser. Your recording will still be saved."
+      );
+      return;
+    }
+
+    const recognition = new Recognition();
+    recognitionRef.current = recognition;
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = language.locale;
+    recognitionActiveRef.current = true;
+
+    recognition.onresult = (event) => {
+      let finalized = "";
+      let interim = "";
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        const words = result[0]?.transcript ?? "";
+        if (result.isFinal) finalized += words;
+        else interim += words;
+      }
+      if (finalized.trim()) {
+        transcriptRef.current = [transcriptRef.current, finalized.trim()]
+          .filter(Boolean)
+          .join(" ");
+        setTranscript(transcriptRef.current);
+      }
+      setInterimTranscript(interim.trim());
     };
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-  };
-  const onOverlayPointerMove = (e: React.PointerEvent) => {
-    if (!dragState.current.dragging) return;
-    setOverlayPos({ x: e.clientX - dragState.current.dx, y: e.clientY - dragState.current.dy });
-  };
-  const onOverlayPointerUp = () => {
-    dragState.current.dragging = false;
+
+    recognition.onerror = (event) => {
+      const speechEvent = event as SpeechRecognitionErrorEvent;
+      if (speechEvent.error === "not-allowed" || speechEvent.error === "service-not-allowed") {
+        recognitionActiveRef.current = false;
+        setSpeechNotice(
+          "Microphone access for speech recognition was denied. Recording continues without a transcript."
+        );
+      } else if (speechEvent.error !== "no-speech" && speechEvent.error !== "aborted") {
+        setSpeechNotice(
+          "Speech recognition stopped unexpectedly. Your recording continues; try again in a supported browser."
+        );
+      }
+    };
+
+    recognition.onend = () => {
+      if (!recognitionActiveRef.current) return;
+      window.setTimeout(() => {
+        if (!recognitionActiveRef.current) return;
+        try {
+          recognition.start();
+        } catch {
+          recognitionActiveRef.current = false;
+          setSpeechNotice(
+            "Speech recognition couldn't restart. Your recording continues without it."
+          );
+        }
+      }, 200);
+    };
+
+    try {
+      recognition.start();
+      setSpeechNotice(null);
+    } catch {
+      recognitionActiveRef.current = false;
+      setSpeechNotice(
+        "Speech recognition couldn't start. Your recording will continue without a transcript."
+      );
+    }
+
+    return () => {
+      recognitionActiveRef.current = false;
+      recognition.stop();
+      recognitionRef.current = null;
+    };
+  }, [isRecording, isPaused, language.locale]);
+
+  useEffect(() => {
+    const latest = recordings[0];
+    if (!latest || latest.id === lastSavedRecordingRef.current || isRecording) return;
+    lastSavedRecordingRef.current = latest.id;
+    updateRecordingTranscript(latest.id, transcriptRef.current, language.name);
+  }, [recordings, isRecording, language.name, updateRecordingTranscript]);
+
+  const beginRecording = () => {
+    void startRecording();
   };
 
-  const bars = Array.from({ length: 48 }, (_, i) => {
-    const wave = Math.abs(Math.sin(i * 0.55)) * 0.4;
-    const level = Math.min(1, micLevel * 2.2 + wave * micLevel + 0.06);
-    return level;
+  const changeMode = (nextMode: Mode) => {
+    if (isRecording || mode === nextMode) return;
+    stopPreview();
+    setMode(nextMode);
+  };
+
+  const bars = Array.from({ length: 46 }, (_, index) => {
+    const contour = Math.abs(Math.sin(index * 0.48)) * 0.7 + 0.2;
+    return Math.min(1, contour * (0.16 + micLevel * 2.1));
   });
-
-  const statusLabel = isPaused
-    ? `PAUSED ${formatTime(elapsed)}`
-    : isRecording
-      ? `REC ${formatTime(elapsed)}`
-      : mode === "video"
-        ? "PREVIEW"
-        : "READY";
+  const canShowFeedback = feedbackLevel[0] > 0 && (!isRecording || feedbackLevel[0] === 2);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-zinc-50 to-zinc-200/60 text-zinc-950">
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 pt-6 sm:px-6">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-900 text-white shadow">
-            <AudioWaveform className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-base font-semibold leading-tight tracking-tight">Capture Studio</p>
-            <p className="text-xs text-zinc-500">Video & voice recorder</p>
-          </div>
-        </div>
+    <div className="journal-shell min-h-screen text-white">
+      <header className="journal-header">
+        <Link href="/" aria-label="Lived home" className="brand-lockup">
+          <span className="brand-mark"><AudioWaveform aria-hidden /></span>
+          <span>
+            <span className="brand-name">lived</span>
+            <span className="brand-caption">A language journal</span>
+          </span>
+        </Link>
 
-        <div className="flex items-center gap-2">
-          <Link
-            href="/review"
-            className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "hidden sm:inline-flex")}
-          >
-            Review transcript
+        <div className="header-actions">
+          <span className="header-note"><span className="status-dot" /> Your space, your pace</span>
+          <Link href="/assistant" className="help-link">
+            <CircleHelp size={16} aria-hidden />
+            <span>How it works</span>
           </Link>
-          <Link
-            href="/review"
-            className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "sm:hidden")}
-          >
-            Transcript
-          </Link>
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label="Open help assistant"
-            onClick={openAssistant}
-          >
-            <HelpCircle className="h-5 w-5" />
-          </Button>
         </div>
       </header>
 
-      {isPaused && (
-        <div className="mx-auto mt-4 max-w-6xl px-4 sm:px-6">
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-            Recording is paused at {formatTime(elapsed)}.{" "}
-            <button
-              type="button"
-              onClick={resumeRecording}
-              className="cursor-pointer font-semibold underline underline-offset-2"
-            >
-              Resume
-            </button>{" "}
-            or open{" "}
-            <button
-              type="button"
-              onClick={openAssistant}
-              className="cursor-pointer font-semibold underline underline-offset-2"
-            >
-              Help assistant
-            </button>
-            .
+      <main className="studio-main">
+        <section className="studio-intro">
+          <div>
+            <p className="eyebrow">YOUR EVERYDAY, IN ANOTHER LANGUAGE</p>
+            <h1>Keep a little of today.</h1>
+            <p className="intro-copy">Speak freely. The learning can come after.</p>
           </div>
-        </div>
-      )}
-
-      <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-6 sm:px-6">
-        <div className="flex flex-col items-center gap-3">
-          <div
-            role="tablist"
-            aria-label="Recording mode"
-            className="grid w-full max-w-sm grid-cols-2 gap-1 rounded-2xl border border-zinc-200 bg-white p-1 shadow-sm"
-          >
-            {(
-              [
-                { id: "video" as const, label: "Video", icon: Video },
-                { id: "voice" as const, label: "Voice", icon: Mic },
-              ] as const
-            ).map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                role="tab"
-                aria-selected={mode === id}
+          <label className="language-picker">
+            <span>Practicing</span>
+            <span className="select-wrap">
+              <select
+                value={language.name}
+                onChange={(event) => {
+                  const next = LANGUAGES.find((item) => item.name === event.target.value);
+                  if (next) setLanguage(next);
+                }}
                 disabled={isRecording}
-                onClick={() => setMode(id)}
-                className={cn(
-                  "flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50",
-                  mode === id
-                    ? "bg-zinc-900 text-white shadow"
-                    : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
-                )}
+                aria-label="Language to practice"
               >
-                <Icon className="h-4 w-4" />
-                {label}
-              </button>
-            ))}
-          </div>
-          <p className="text-xs text-zinc-500">
-            {mode === "video" ? "Camera + microphone" : "Microphone only"} · stored locally
-          </p>
-        </div>
+                {LANGUAGES.map((item) => <option key={item.name}>{item.name}</option>)}
+              </select>
+              <ChevronDown size={14} aria-hidden />
+            </span>
+          </label>
+        </section>
 
-        {error && (
-          <div className="mx-auto mt-4 max-w-2xl rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
-        )}
-
-        <Card className="relative mt-6 overflow-hidden">
-          <div className="relative aspect-video w-full bg-zinc-950">
-            {mode === "video" ? (
-              <>
-                <video ref={videoRef} muted playsInline className="h-full w-full object-cover" />
-                {!streamActive && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-zinc-400">
-                    <Video className="h-10 w-10" />
-                    <p className="text-sm">Camera preview will appear here</p>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="flex h-full w-full flex-col items-center justify-center gap-5 bg-[radial-gradient(ellipse_at_center,#27272a_0%,#09090b_70%)] px-6">
-                <div
-                  className={cn(
-                    "flex h-20 w-20 items-center justify-center rounded-full border transition-all",
-                    isRecording && !isPaused
-                      ? "border-red-500/60 bg-red-500/15 text-red-400"
-                      : "border-zinc-700 bg-zinc-800/80 text-zinc-200"
-                  )}
-                  style={
-                    isRecording && !isPaused
-                      ? { boxShadow: `0 0 ${30 + micLevel * 60}px rgba(239,68,68,.45)` }
-                      : undefined
-                  }
-                >
-                  <Mic className="h-8 w-8" />
-                </div>
-                <div className="flex h-16 w-full max-w-xl items-center justify-center gap-1">
-                  {bars.map((v, i) => (
-                    <span
-                      key={i}
-                      className={cn(
-                        "w-1.5 rounded-full transition-all duration-150",
-                        isRecording && !isPaused || streamActive ? "bg-emerald-400" : "bg-zinc-700"
-                      )}
-                      style={{ height: `${Math.max(8, v * 100)}%`, opacity: 0.35 + v * 0.65 }}
-                    />
-                  ))}
-                </div>
-                <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">
-                  {isPaused ? "paused" : isRecording ? "capturing audio" : streamActive ? "mic live" : "mic off"}
-                </p>
-              </div>
-            )}
-
-            <div className="absolute left-4 top-4 flex items-center gap-2">
-              <span
-                className={cn(
-                  "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold backdrop-blur-md",
-                  isRecording && !isPaused
-                    ? "bg-red-600/90 text-white"
-                    : isPaused
-                      ? "bg-amber-500/90 text-white"
-                      : "bg-black/50 text-zinc-200"
-                )}
-              >
-                <span
-                  className={cn(
-                    "h-2 w-2 rounded-full",
-                    isRecording && !isPaused ? "animate-pulse bg-white" : isPaused ? "bg-white" : "bg-zinc-400"
-                  )}
-                />
-                {statusLabel}
-              </span>
-            </div>
-
-            <div className="absolute right-4 top-4 flex gap-2">
-              <Button
-                variant="outline"
-                size="icon-sm"
-                className="border-white/20 bg-black/50 text-white backdrop-blur-md hover:bg-black/70 hover:text-white"
-                onClick={() => setOverlayVisible((v) => !v)}
-                aria-label={overlayVisible ? "Hide note window" : "Show note window"}
-              >
-                {overlayVisible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-              </Button>
-              <Button
-                variant="outline"
-                size="icon-sm"
-                className="border-white/20 bg-black/50 text-white backdrop-blur-md hover:bg-black/70 hover:text-white"
-                onClick={() => {
-                  setOverlayPos({ x: 0, y: 0 });
-                  setOverlayText(DEFAULT_OVERLAY_TEXT);
-                }}
-                aria-label="Reset note window"
-              >
-                <RotateCcw className="h-4 w-4" />
-              </Button>
-            </div>
-
-            {overlayVisible && (
-              <div
-                ref={overlayRef}
-                onPointerDown={onOverlayPointerDown}
-                onPointerMove={onOverlayPointerMove}
-                onPointerUp={onOverlayPointerUp}
-                className="absolute left-1/2 top-1/2 w-[min(90%,26rem)] -translate-x-1/2 -translate-y-1/2 cursor-move touch-none rounded-2xl border border-white/25 bg-zinc-900 text-white shadow-2xl backdrop-blur-xl"
-                style={{
-                  opacity: overlayOpacity[0] / 100,
-                  transform: `translate(calc(-50% + ${overlayPos.x}px), calc(-50% + ${overlayPos.y}px))`,
-                }}
-              >
-                <div className="flex items-center justify-between border-b border-white/10 px-4 py-2">
-                  <div className="flex gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-red-400/80" />
-                    <span className="h-2.5 w-2.5 rounded-full bg-amber-300/80" />
-                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
-                  </div>
-                  <span className="text-[11px] font-medium uppercase tracking-widest text-white/60">
-                    Live note
-                  </span>
-                  <button
-                    onClick={() => setOverlayVisible(false)}
-                    className="cursor-pointer rounded-full px-1.5 text-sm leading-none text-white/60 hover:bg-white/10 hover:text-white"
-                    aria-label="Close note"
-                  >
-                    ×
-                  </button>
-                </div>
-                <textarea
-                  value={overlayText}
-                  onChange={(e) => setOverlayText(e.target.value)}
-                  rows={4}
-                  className="w-full cursor-text resize-none bg-transparent px-4 py-3 text-sm leading-relaxed text-white/90 outline-none placeholder:text-white/40"
-                  placeholder="Type your script or notes here…"
-                />
-              </div>
-            )}
-
-            <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 bg-gradient-to-t from-black/70 to-transparent px-4 pb-4 pt-10">
-              <div className="flex flex-wrap items-center gap-2">
-                {!isRecording ? (
-                  <Button variant="record" size="lg" onClick={startRecording} className="rounded-full">
-                    <Circle className="h-4 w-4 fill-current" />
-                    Record
-                  </Button>
-                ) : isPaused ? (
-                  <>
-                    <Button variant="record" size="lg" onClick={resumeRecording} className="rounded-full">
-                      <Play className="h-4 w-4 fill-current" />
-                      Resume
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="lg"
-                      onClick={stopRecording}
-                      className="rounded-full border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
-                    >
-                      <Square className="h-4 w-4 fill-current" />
-                      Stop
-                    </Button>
-                  </>
-                ) : (
-                  <Button variant="record" size="lg" onClick={stopRecording} className="rounded-full">
-                    <Square className="h-4 w-4 fill-current" />
-                    Stop · {formatTime(elapsed)}
-                  </Button>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-white/20 bg-white/10 text-white backdrop-blur-md hover:bg-white/20 hover:text-white"
-                  onClick={() => {
-                    stopRecording();
-                    void startPreview(mode);
-                  }}
-                >
-                  Retry camera
-                </Button>
-              </div>
-              <div className="hidden items-center gap-2 sm:flex">
-                <Mic className="h-3.5 w-3.5 text-white/70" />
-                <div className="h-1.5 w-28 overflow-hidden rounded-full bg-white/20">
-                  <div
-                    className="h-full rounded-full bg-emerald-400 transition-all duration-100"
-                    style={{ width: `${Math.min(100, micLevel * 220)}%` }}
+        <div className="studio-layout">
+          <section className="capture-panel" aria-label="Recording studio">
+            <div className={cn("capture-stage", mode === "voice" && "voice-stage")}>
+              {mode === "video" ? (
+                <>
+                  <video
+                    ref={videoRef}
+                    muted
+                    playsInline
+                    className={cn("camera-feed", !streamActive && "camera-feed-hidden")}
+                    aria-label="Live camera preview"
                   />
+                  {!streamActive && (
+                    <div className="camera-welcome">
+                      <div className="landscape-art" aria-hidden>
+                        <span className="landscape-sun" />
+                        <span className="landscape-hill hill-back" />
+                        <span className="landscape-hill hill-front" />
+                      </div>
+                      <div className="camera-welcome-content">
+                        <span className="welcome-icon"><Video size={18} /></span>
+                        <p className="stage-overline">A MOMENT, JUST AS IT IS</p>
+                        <h2>Your view will find its way here.</h2>
+                        <p>Turn on your camera when you’re ready. Nothing starts until you are.</p>
+                        <Button
+                          variant="outline"
+                          onClick={() => void startPreview("video")}
+                          className="camera-start"
+                        >
+                          <Video size={15} />
+                          Start camera
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="voice-welcome">
+                  <div className={cn("voice-orbit", isRecording && !isPaused && "voice-orbit-active")}>
+                    <span className="orbit-ring ring-one" />
+                    <span className="orbit-ring ring-two" />
+                    <span className="voice-center"><Mic size={25} /></span>
+                  </div>
+                  <div className="voice-waveform" aria-label={streamActive ? "Microphone input level" : "Microphone not active"}>
+                    {bars.map((height, index) => (
+                      <span
+                        key={index}
+                        className={cn(streamActive ? "wave-bar-live" : "wave-bar-idle")}
+                        style={{ height: `${Math.max(6, height * 58)}px` }}
+                      />
+                    ))}
+                  </div>
+                  <p className="voice-stage-caption">
+                    {isPaused ? "A quiet pause" : isRecording ? "Listening to your story" : "A voice note, whenever you’re ready"}
+                  </p>
+                  {!streamActive && !isRecording && (
+                    <button type="button" className="voice-enable" onClick={() => void startPreview("voice")}>
+                      <Headphones size={15} />
+                      Check microphone
+                    </button>
+                  )}
                 </div>
-              </div>
-            </div>
-          </div>
-        </Card>
+              )}
 
-        <div className="mt-6 grid gap-4 md:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Overlay opacity</CardTitle>
-              <CardDescription>How see-through the floating note window is.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-4">
-                <Slider
-                  value={overlayOpacity}
-                  onValueChange={setOverlayOpacity}
-                  min={15}
-                  max={100}
-                  step={1}
-                  className="flex-1"
-                />
-                <span className="w-12 text-right text-sm font-medium tabular-nums">
-                  {overlayOpacity[0]}%
+              <div className="stage-topline">
+                <span className={cn("recording-status", isRecording && !isPaused && "recording-status-live", isPaused && "recording-status-paused")}>
+                  <span className="recording-status-dot" />
+                  {isPaused ? `PAUSED · ${formatTime(elapsed)}` : isRecording ? `RECORDING · ${formatTime(elapsed)}` : streamActive ? "READY WHEN YOU ARE" : "YOUR JOURNAL"}
+                </span>
+                <span className="stage-mode-label">
+                  {mode === "video" ? <Video size={13} /> : <Mic size={13} />}
+                  {mode === "video" ? "VIDEO + AUDIO" : "VOICE ONLY"}
                 </span>
               </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Meter boost</CardTitle>
-              <CardDescription>Visual boost for the mic meter. Mic input itself is unchanged.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <MeterBoostSlider />
-            </CardContent>
-          </Card>
+
+              {mode === "video" && streamActive && (
+                <div className="camera-audio-meter" aria-label="Microphone input">
+                  <Mic size={13} />
+                  <div className="meter-track"><span style={{ width: `${Math.min(100, micLevel * 220)}%` }} /></div>
+                  <span>MIC</span>
+                </div>
+              )}
+
+              <div className="stage-controls">
+                <div className="stage-controls-context">
+                  <span className={cn("capture-state-icon", isRecording && !isPaused && "capture-state-active")}>
+                    {mode === "video" ? <Video size={17} /> : <AudioLines size={17} />}
+                  </span>
+                  <span>
+                    <strong>{isRecording ? (isPaused ? "Paused" : "You’re recording") : "A moment worth keeping"}</strong>
+                    <small>{mode === "video" ? "Video and your voice, together" : "Just your voice, nothing else"}</small>
+                  </span>
+                </div>
+                <div className="record-controls">
+                  {isRecording ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="stage-icon-button"
+                        onClick={isPaused ? resumeRecording : pauseRecording}
+                        aria-label={isPaused ? "Resume recording" : "Pause recording"}
+                      >
+                        {isPaused ? <Play size={16} /> : <Pause size={16} />}
+                      </Button>
+                      <Button variant="record" size="lg" onClick={stopRecording} className="record-button">
+                        <Square size={14} fill="currentColor" />
+                        Finish
+                      </Button>
+                    </>
+                  ) : (
+                    <Button variant="record" size="lg" onClick={beginRecording} className="record-button">
+                      <span className="record-button-dot"><Circle size={12} fill="currentColor" /></span>
+                      Start a moment
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {error && <p role="alert" className="device-error">{error}</p>}
+
+            <div className="capture-footer">
+              <div className="mode-switch" role="group" aria-label="Recording mode">
+                <button
+                  type="button"
+                  onClick={() => changeMode("video")}
+                  aria-pressed={mode === "video"}
+                  disabled={isRecording}
+                  className={cn(mode === "video" && "mode-active")}
+                >
+                  <Video size={14} /> Video
+                </button>
+                <button
+                  type="button"
+                  onClick={() => changeMode("voice")}
+                  aria-pressed={mode === "voice"}
+                  disabled={isRecording}
+                  className={cn(mode === "voice" && "mode-active")}
+                >
+                  <Mic size={14} /> Voice
+                </button>
+              </div>
+              <span className="local-note"><Radio size={13} /> Saved only in this session</span>
+            </div>
+          </section>
+
+          <section className="transcript-panel" aria-label="Journal transcript">
+            <div className="transcript-header">
+              <div>
+                <div className="transcript-heading-line">
+                  <h2>Your words</h2>
+                  {(isRecording || transcript) && <span className="live-indicator"><span />{isRecording ? "LIVE" : "SAVED"}</span>}
+                </div>
+                <p>{isRecording ? "No rush. We’re right here with you." : "A gentle reflection, whenever you want one."}</p>
+              </div>
+              <span className="language-tag">{language.name}</span>
+            </div>
+
+            <div className="transcript-content" aria-live="polite" aria-atomic="false">
+              {transcript || interimTranscript ? (
+                <div className="spoken-transcript">
+                  {transcript && <p>{transcript}</p>}
+                  {interimTranscript && <p className="interim-copy">{interimTranscript}</p>}
+                  {isRecording && !speechNotice && <span className="listening-cursor" aria-label="Listening" />}
+                  {!isRecording && transcript && (
+                    <p className="transcript-next-step">
+                      {feedbackLevel[0] === 0
+                        ? "You chose a quiet session. Your words are yours to revisit."
+                        : "Your words are saved with this take. Contextual AI feedback isn’t connected yet."}
+                    </p>
+                  )}
+                </div>
+              ) : showDemo && !isRecording ? (
+                <div className="demo-transcript">
+                  <span className="demo-label">A LITTLE PREVIEW <span>·</span> SAMPLE TEXT</span>
+                  <p className="demo-line">We’ve been walking for hours.</p>
+                  <p className="demo-line">I’m tired, but I’m glad we came.</p>
+                  <p className="demo-line">I made it up here — look at that view.</p>
+                  <p className="demo-line">
+                    This is a beautiful{" "}
+                    {canShowFeedback ? (
+                      <button
+                        type="button"
+                        className="feedback-word feedback-word-error"
+                        aria-expanded={feedbackOpen === "correction"}
+                        onClick={() => setFeedbackOpen((open) => open === "correction" ? null : "correction")}
+                      >
+                        scenes
+                      </button>
+                    ) : "scene"}.
+                  </p>
+                  {canShowFeedback && (
+                    <p className="demo-line">
+                    I{" "}
+                    <button
+                      type="button"
+                      className="feedback-word feedback-word-positive"
+                      aria-expanded={feedbackOpen === "positive"}
+                      onClick={() => setFeedbackOpen((open) => open === "positive" ? null : "positive")}
+                    >
+                      made it up here
+                    </button>{" "}
+                    — look at that view.
+                    </p>
+                  )}
+                  {feedbackOpen && canShowFeedback && (
+                    <aside className="feedback-popover" aria-label="Language feedback">
+                    <div className="feedback-popover-heading">
+                      <span className="feedback-symbol">{feedbackOpen === "positive" ? <Check size={12} /> : "↗"}</span>
+                      <span>{feedbackOpen === "positive" ? "A lovely, natural expression" : "Small thought, for later"}</span>
+                      <button type="button" onClick={() => setFeedbackOpen(null)} aria-label="Close feedback">×</button>
+                    </div>
+                    {feedbackOpen === "positive" ? (
+                      <>
+                        <p>“Made it up here” is a natural, conversational way to share that you reached the top.</p>
+                        <p className="feedback-tip">It keeps the feeling of the moment in your own words.</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="feedback-correction">
+                          <span>{DEMO_FEEDBACK.original}</span>
+                          <span aria-hidden>→</span>
+                          <strong>{DEMO_FEEDBACK.correction}</strong>
+                        </p>
+                        <p>{DEMO_FEEDBACK.explanation}</p>
+                        <p className="feedback-tip">{DEMO_FEEDBACK.tip}</p>
+                      </>
+                    )}
+                    <span className="demo-disclaimer">Example feedback · not generated by AI</span>
+                    </aside>
+                  )}
+                  <p className="demo-hint">
+                    <Check size={13} />
+                    {canShowFeedback ? "Tap the highlighted word to explore" : "Feedback is quiet for this session"}
+                  </p>
+                </div>
+              ) : (
+                <div className="empty-transcript">
+                  <span><Waves size={20} /></span>
+                  <p>{isRecording ? "Your words will settle here as you speak." : "When you’re ready, your words will find their way here."}</p>
+                  {!isRecording && <button type="button" onClick={() => setShowDemo(true)}>See a short example</button>}
+                </div>
+              )}
+            </div>
+
+            {speechNotice && (
+              <div role="status" className="speech-notice">
+                <CircleHelp size={14} />
+                <span>{speechNotice}</span>
+              </div>
+            )}
+
+            <div className="feedback-control">
+              <div className="feedback-control-heading">
+                <span>Live language feedback</span>
+                <span className="feedback-level-label">
+                  {["Quiet", "Gentle", "Curious"][feedbackLevel[0]]}
+                </span>
+              </div>
+              <Slider
+                value={feedbackLevel}
+                onValueChange={(value) => {
+                  setFeedbackLevel(value);
+                  setFeedbackOpen(null);
+                }}
+                min={0}
+                max={2}
+                step={1}
+                aria-label="Live language feedback intensity"
+                className="feedback-slider"
+              />
+              <div className="slider-labels"><span>No</span><span>A little</span><span>Yes</span></div>
+              <p className="feedback-description">
+                {feedbackLevel[0] === 0
+                  ? "Just let the story flow. Review later, if you like."
+                  : feedbackLevel[0] === 1
+                    ? "Keep the moment. We’ll leave the little notes for later."
+                    : "Show gentle language notes as you go."}
+              </p>
+            </div>
+
+            <div className="transcript-footer">
+              <div className="mini-waveform" aria-label="Audio level waveform">
+                {bars.slice(0, 26).map((height, index) => (
+                  <span key={index} className={cn(streamActive ? "mini-wave-live" : "mini-wave-idle")} style={{ height: `${Math.max(3, height * 20)}px` }} />
+                ))}
+              </div>
+              <div className="audio-meta">
+                <strong>{isRecording ? (isPaused ? "Paused" : "A moment in progress") : transcript ? "Your journal entry" : "Ready when you are"}</strong>
+                <span>{isRecording ? formatTime(elapsed) : "Audio stays on this device"}</span>
+              </div>
+              <span className="audio-icon"><AudioLines size={16} /></span>
+            </div>
+          </section>
         </div>
 
-        <section className="mt-8">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-base font-semibold tracking-tight">
-              Takes <span className="text-zinc-400">({recordings.length})</span>
-            </h2>
+        <section className="journal-entries" aria-label="Recent journal entries">
+          <div className="entries-heading">
+            <div>
+              <p className="eyebrow">KEPT CLOSE</p>
+              <h2>Recent moments <span>{recordings.length.toString().padStart(2, "0")}</span></h2>
+            </div>
             {recordings.length > 0 && (
-              <Button variant="ghost" size="sm" onClick={clearRecordings}>
-                Clear all
+              <Button variant="ghost" size="sm" className="clear-recordings" onClick={clearRecordings}>
+                Clear entries
               </Button>
             )}
           </div>
           {recordings.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
-                {mode === "video" ? (
-                  <Video className="h-8 w-8 text-zinc-300" />
-                ) : (
-                  <Mic className="h-8 w-8 text-zinc-300" />
-                )}
-                <p className="text-sm font-medium">No takes yet</p>
-                <p className="max-w-sm text-xs text-zinc-500">
-                  Hit <strong>Record</strong>, perform your take, then press <strong>Stop</strong>.
-                  Tap <strong>?</strong> anytime for the voice assistant — recording pauses automatically.
-                </p>
-              </CardContent>
-            </Card>
+            <div className="entries-empty">
+              <span><AudioWaveform size={17} /></span>
+              <p>Your first moment will stay here until you leave this session.</p>
+            </div>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2">
-              {recordings.map((r) => (
-                <Card key={r.id} className="overflow-hidden">
-                  <CardContent className="p-0">
-                    {r.mode === "video" ? (
-                      <video src={r.url} controls playsInline className="aspect-video w-full bg-black" />
-                    ) : (
-                      <div className="flex flex-col gap-3 bg-zinc-950 p-4">
-                        <div className="flex items-center gap-2 text-xs text-zinc-400">
-                          <Mic className="h-3.5 w-3.5" /> Voice take · {formatTime(r.duration)}
-                        </div>
-                        <audio src={r.url} controls className="w-full" />
-                      </div>
-                    )}
-                    <div className="flex items-center justify-between gap-2 p-3">
-                      <div className="text-xs text-zinc-500">
-                        {r.mode === "video" ? "Video" : "Voice"} · {formatTime(r.duration)} ·{" "}
-                        {r.createdAt.toLocaleTimeString()}
-                      </div>
-                      <div className="flex gap-1.5">
-                        <a
-                          href={r.url}
-                          download={`take-${r.id}.webm`}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-zinc-200 hover:bg-zinc-100"
-                          aria-label="Download take"
-                        >
-                          <Download className="h-4 w-4" />
-                        </a>
-                        <button
-                          onClick={() => deleteRecording(r.id)}
-                          className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-zinc-200 text-red-600 hover:bg-red-50"
-                          aria-label="Delete take"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
+            <div className="entries-grid">
+              {recordings.map((recording, index) => (
+                <article key={recording.id} className="entry-card">
+                  <div className="entry-card-top">
+                    <span className="entry-index">{String(recordings.length - index).padStart(2, "0")}</span>
+                    <span className="entry-mode">{recording.mode === "video" ? <Video size={12} /> : <Mic size={12} />}{recording.mode === "video" ? "Video journal" : "Voice journal"}</span>
+                    <span className="entry-duration">{formatTime(recording.duration)}</span>
+                  </div>
+                  {recording.mode === "video" ? (
+                    <video src={recording.url} controls playsInline className="entry-media" aria-label="Play video journal entry" />
+                  ) : (
+                    <div className="entry-audio"><AudioLines size={17} /><audio src={recording.url} controls aria-label="Play voice journal entry" /></div>
+                  )}
+                  <p className={cn("entry-transcript", expandedRecordingId !== recording.id && "entry-transcript-clamped")}>
+                    {recording.transcript || "No speech transcript was captured for this moment."}
+                  </p>
+                  {recording.transcript && (
+                    <button
+                      type="button"
+                      className="entry-transcript-toggle"
+                      aria-expanded={expandedRecordingId === recording.id}
+                      onClick={() => setExpandedRecordingId((id) => id === recording.id ? null : recording.id)}
+                    >
+                      {expandedRecordingId === recording.id ? "Show less" : "Read full transcript"}
+                    </button>
+                  )}
+                  <div className="entry-card-bottom">
+                    <span>{recording.language || language.name} <span>·</span> {recording.createdAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
+                    <div>
+                      <a href={recording.url} download={`lived-${recording.id}.webm`} aria-label="Download journal entry"><Download size={14} /></a>
+                      <button type="button" onClick={() => deleteRecording(recording.id)} aria-label="Delete journal entry"><Trash2 size={14} /></button>
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </article>
               ))}
             </div>
           )}
         </section>
-      </main>
-    </div>
-  );
-}
 
-function MeterBoostSlider() {
-  const [v, setV] = useState([100]);
-  return (
-    <div className="flex items-center gap-4">
-      <Slider value={v} onValueChange={setV} min={20} max={200} step={5} className="flex-1" />
-      <span className="w-12 text-right text-sm font-medium tabular-nums">{v[0]}%</span>
+        <footer className="studio-note">
+          <RotateCcw size={13} />
+          <span>Everything here is temporary. Your recordings stay in this browser session and aren’t uploaded.</span>
+        </footer>
+      </main>
     </div>
   );
 }

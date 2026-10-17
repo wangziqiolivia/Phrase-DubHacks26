@@ -19,6 +19,8 @@ export interface Recording {
   mode: Mode;
   duration: number;
   createdAt: Date;
+  transcript?: string;
+  language?: string;
 }
 
 interface RecordingContextValue {
@@ -32,13 +34,15 @@ interface RecordingContextValue {
   streamActive: boolean;
   micLevel: number;
   videoRef: React.RefObject<HTMLVideoElement | null>;
-  startRecording: () => void;
+  startRecording: () => Promise<void>;
   stopRecording: () => void;
   pauseRecording: () => void;
   resumeRecording: () => void;
   deleteRecording: (id: string) => void;
   clearRecordings: () => void;
+  updateRecordingTranscript: (id: string, transcript: string, language: string) => void;
   startPreview: (nextMode?: Mode) => Promise<void>;
+  stopPreview: () => void;
 }
 
 const RecordingContext = createContext<RecordingContextValue | null>(null);
@@ -88,6 +92,10 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
       if (isRecording) return;
       stopStream();
       try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          setError("This browser does not support camera or microphone access.");
+          return;
+        }
         const stream = await navigator.mediaDevices.getUserMedia({
           video:
             nextMode === "video"
@@ -118,10 +126,14 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
           rafRef.current = requestAnimationFrame(tick);
         };
         tick();
-      } catch {
-        setError(
-          "Could not access your camera or microphone. Check browser permissions and make sure no other app is using them."
-        );
+      } catch (cause) {
+        const message =
+          cause instanceof DOMException && cause.name === "NotAllowedError"
+            ? "Camera or microphone access was denied. Allow access in your browser settings, then try again."
+            : cause instanceof DOMException && cause.name === "NotFoundError"
+              ? "No compatible camera or microphone was found for this recording mode."
+              : "Could not access your camera or microphone. Check browser permissions and that no other app is using them.";
+        setError(message);
       }
     },
     [isRecording, mode, stopStream]
@@ -139,26 +151,39 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
     }, 500);
   };
 
-  const startRecording = () => {
+  const startRecording = async () => {
     if (!streamRef.current) {
-      void startPreview(mode);
+      await startPreview(mode);
+    }
+    const stream = streamRef.current;
+    if (!stream) return;
+    if (typeof MediaRecorder === "undefined") {
+      setError("Recording is not supported by this browser.");
       return;
     }
     setError(null);
     chunksRef.current = [];
-    const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-      ? "video/webm;codecs=vp9"
-      : undefined;
-    const rec = new MediaRecorder(
-      streamRef.current,
-      mime ? { mimeType: mime } : undefined
+    const requestedMode = mode;
+    const preferredMimes =
+      requestedMode === "video"
+        ? ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"]
+        : ["audio/webm;codecs=opus", "audio/webm"];
+    const mime = preferredMimes.find((candidate) =>
+      MediaRecorder.isTypeSupported(candidate)
     );
+    let rec: MediaRecorder;
+    try {
+      rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+    } catch {
+      setError("This browser could not start a recording with the selected device.");
+      return;
+    }
     recorderRef.current = rec;
     rec.ondataavailable = (e) => {
       if (e.data.size > 0) chunksRef.current.push(e.data);
     };
     rec.onstop = () => {
-      const type = mode === "video" ? "video/webm" : "audio/webm";
+      const type = rec.mimeType || (requestedMode === "video" ? "video/webm" : "audio/webm");
       const blob = new Blob(chunksRef.current, { type });
       const url = URL.createObjectURL(blob);
       setRecordings((prev) => [
@@ -166,20 +191,31 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
           id: crypto.randomUUID(),
           url,
           blob,
-          mode,
+          mode: requestedMode,
           duration: Math.floor((Date.now() - startTimeRef.current) / 1000),
           createdAt: new Date(),
         },
         ...prev,
       ]);
     };
+    rec.onerror = () => {
+      setError("The browser encountered an error while recording. Try starting a new moment.");
+      setIsRecording(false);
+      setIsPaused(false);
+      clearTimer();
+    };
     startTimeRef.current = Date.now();
     elapsedBaseRef.current = 0;
-    rec.start(250);
-    setIsRecording(true);
-    setIsPaused(false);
-    setElapsed(0);
-    startTimer();
+    try {
+      rec.start(250);
+      setIsRecording(true);
+      setIsPaused(false);
+      setElapsed(0);
+      startTimer();
+    } catch {
+      recorderRef.current = null;
+      setError("The browser could not begin recording. Check the selected device and try again.");
+    }
   };
 
   const stopRecording = () => {
@@ -198,6 +234,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
     }
     elapsedBaseRef.current = Math.floor((Date.now() - startTimeRef.current) / 1000);
     setElapsed(elapsedBaseRef.current);
+    startTimeRef.current = Date.now() - elapsedBaseRef.current * 1000;
     clearTimer();
     setIsPaused(true);
   };
@@ -221,7 +258,23 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const clearRecordings = () => setRecordings([]);
+  const clearRecordings = () => {
+    recordings.forEach((recording) => URL.revokeObjectURL(recording.url));
+    setRecordings([]);
+  };
+
+  const updateRecordingTranscript = useCallback(
+    (id: string, transcript: string, language: string) => {
+      setRecordings((prev) =>
+        prev.map((recording) =>
+          recording.id === id
+            ? { ...recording, transcript, language }
+            : recording
+        )
+      );
+    },
+    []
+  );
 
   useEffect(() => {
     return () => {
@@ -249,7 +302,9 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         resumeRecording,
         deleteRecording,
         clearRecordings,
+        updateRecordingTranscript,
         startPreview,
+        stopPreview: stopStream,
       }}
     >
       {children}
