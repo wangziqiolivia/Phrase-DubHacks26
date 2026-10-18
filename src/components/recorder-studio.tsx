@@ -582,7 +582,7 @@ export function RecorderStudio() {
             <p className="eyebrow">Learn in practice.</p>
             <h1>Learn a new language effortlessly.</h1>
             <p className="intro-copy">
-              No boring testooks. Specially made for beginners.
+              No boring textbooks. Specially made for beginners.
             </p>
           </div>
           <label className="language-picker">
@@ -690,7 +690,7 @@ export function RecorderStudio() {
                       ? "A quiet pause"
                       : isRecording
                         ? "Listening to your story"
-                        : "A voice note, whenever you’re ready"}
+                        : "What would you like to talk about today?"}
                   </p>
                   {!streamActive && !isRecording && (
                     <button
@@ -763,12 +763,10 @@ export function RecorderStudio() {
                         ? isPaused
                           ? "Paused"
                           : "You’re recording"
-                        : "A moment worth keeping"}
+                        : "Grasp the authentic thoughts"}
                     </strong>
                     <small>
-                      {mode === "video"
-                        ? "Video and your voice, together"
-                        : "Just your voice, nothing else"}
+                      {mode === "video" ? "Video and voice" : "Voice only"}
                     </small>
                   </span>
                 </div>
