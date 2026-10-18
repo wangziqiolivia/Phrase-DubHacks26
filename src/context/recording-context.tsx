@@ -21,6 +21,8 @@ export interface Recording {
   createdAt: Date;
   transcript?: string;
   language?: string;
+  transcriptionAudio?: Blob;
+  transcriptionAudioUnavailable?: boolean;
 }
 
 interface RecordingContextValue {
@@ -66,7 +68,12 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const transcriptionRecorderRef = useRef<MediaRecorder | null>(null);
+  const previewRequestRef = useRef<Promise<void> | null>(null);
+  const previewRequestIdRef = useRef(0);
+  const recordingStartRef = useRef(false);
   const chunksRef = useRef<Blob[]>([]);
+  const transcriptionChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -75,6 +82,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
   const elapsedBaseRef = useRef(0);
 
   const stopStream = useCallback(() => {
+    previewRequestIdRef.current += 1;
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     setStreamActive(false);
@@ -90,50 +98,75 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
     async (nextMode: Mode = mode) => {
       setError(null);
       if (isRecording) return;
+      if (previewRequestRef.current) {
+        await previewRequestRef.current;
+        return;
+      }
       stopStream();
+      const requestId = ++previewRequestIdRef.current;
+      const request = (async () => {
+        try {
+          if (!navigator.mediaDevices?.getUserMedia) {
+            setError("This browser does not support camera or microphone access.");
+            return;
+          }
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video:
+              nextMode === "video"
+                ? { width: { ideal: 1280 }, height: { ideal: 720 } }
+                : false,
+            audio: true,
+          });
+          if (requestId !== previewRequestIdRef.current) {
+            stream.getTracks().forEach((track) => track.stop());
+            return;
+          }
+          streamRef.current = stream;
+          if (nextMode === "video" && videoRef.current) {
+            videoRef.current.srcObject = stream;
+            await videoRef.current.play().catch(() => {});
+          }
+          if (requestId !== previewRequestIdRef.current) {
+            stream.getTracks().forEach((track) => track.stop());
+            if (streamRef.current === stream) streamRef.current = null;
+            return;
+          }
+          setStreamActive(true);
+
+          const ctx = new AudioContext();
+          audioCtxRef.current = ctx;
+          const src = ctx.createMediaStreamSource(stream);
+          const analyser = ctx.createAnalyser();
+          analyser.fftSize = 256;
+          src.connect(analyser);
+          analyserRef.current = analyser;
+
+          const data = new Uint8Array(analyser.frequencyBinCount);
+          const tick = () => {
+            analyser.getByteFrequencyData(data);
+            const avg = data.reduce((a, b) => a + b, 0) / data.length / 255;
+            setMicLevel(avg);
+            rafRef.current = requestAnimationFrame(tick);
+          };
+          tick();
+        } catch (cause) {
+          if (requestId !== previewRequestIdRef.current) return;
+          const message =
+            cause instanceof DOMException && cause.name === "NotAllowedError"
+              ? "Camera or microphone access was denied. Allow access in your browser settings, then try again."
+              : cause instanceof DOMException && cause.name === "NotFoundError"
+                ? "No compatible camera or microphone was found for this recording mode."
+                : "Could not access your camera or microphone. Check browser permissions and that no other app is using them.";
+          setError(message);
+        }
+      })();
+      previewRequestRef.current = request;
       try {
-        if (!navigator.mediaDevices?.getUserMedia) {
-          setError("This browser does not support camera or microphone access.");
-          return;
+        await request;
+      } finally {
+        if (previewRequestRef.current === request) {
+          previewRequestRef.current = null;
         }
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video:
-            nextMode === "video"
-              ? { width: { ideal: 1280 }, height: { ideal: 720 } }
-              : false,
-          audio: true,
-        });
-        streamRef.current = stream;
-        if (nextMode === "video" && videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play().catch(() => {});
-        }
-        setStreamActive(true);
-
-        const ctx = new AudioContext();
-        audioCtxRef.current = ctx;
-        const src = ctx.createMediaStreamSource(stream);
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 256;
-        src.connect(analyser);
-        analyserRef.current = analyser;
-
-        const data = new Uint8Array(analyser.frequencyBinCount);
-        const tick = () => {
-          analyser.getByteFrequencyData(data);
-          const avg = data.reduce((a, b) => a + b, 0) / data.length / 255;
-          setMicLevel(avg);
-          rafRef.current = requestAnimationFrame(tick);
-        };
-        tick();
-      } catch (cause) {
-        const message =
-          cause instanceof DOMException && cause.name === "NotAllowedError"
-            ? "Camera or microphone access was denied. Allow access in your browser settings, then try again."
-            : cause instanceof DOMException && cause.name === "NotFoundError"
-              ? "No compatible camera or microphone was found for this recording mode."
-              : "Could not access your camera or microphone. Check browser permissions and that no other app is using them.";
-        setError(message);
       }
     },
     [isRecording, mode, stopStream]
@@ -152,78 +185,178 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
   };
 
   const startRecording = async () => {
-    if (!streamRef.current) {
-      await startPreview(mode);
-    }
-    const stream = streamRef.current;
-    if (!stream) return;
-    if (typeof MediaRecorder === "undefined") {
-      setError("Recording is not supported by this browser.");
-      return;
-    }
-    setError(null);
-    chunksRef.current = [];
-    const requestedMode = mode;
-    const preferredMimes =
-      requestedMode === "video"
-        ? ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"]
-        : ["audio/webm;codecs=opus", "audio/webm"];
-    const mime = preferredMimes.find((candidate) =>
-      MediaRecorder.isTypeSupported(candidate)
-    );
-    let rec: MediaRecorder;
+    if (recordingStartRef.current || isRecording) return;
+    recordingStartRef.current = true;
+    let recordingStarted = false;
     try {
-      rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
-    } catch {
-      setError("This browser could not start a recording with the selected device.");
-      return;
-    }
-    recorderRef.current = rec;
-    rec.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data);
-    };
-    rec.onstop = () => {
-      const type = rec.mimeType || (requestedMode === "video" ? "video/webm" : "audio/webm");
-      const blob = new Blob(chunksRef.current, { type });
-      const url = URL.createObjectURL(blob);
-      setRecordings((prev) => [
-        {
-          id: crypto.randomUUID(),
-          url,
-          blob,
-          mode: requestedMode,
-          duration: Math.floor((Date.now() - startTimeRef.current) / 1000),
-          createdAt: new Date(),
-        },
-        ...prev,
-      ]);
-    };
-    rec.onerror = () => {
-      setError("The browser encountered an error while recording. Try starting a new moment.");
-      setIsRecording(false);
-      setIsPaused(false);
-      clearTimer();
-    };
-    startTimeRef.current = Date.now();
-    elapsedBaseRef.current = 0;
-    try {
-      rec.start(250);
-      setIsRecording(true);
-      setIsPaused(false);
-      setElapsed(0);
-      startTimer();
-    } catch {
-      recorderRef.current = null;
-      setError("The browser could not begin recording. Check the selected device and try again.");
+      if (!streamRef.current) {
+        await startPreview(mode);
+      }
+      const stream = streamRef.current;
+      if (!stream) return;
+      if (typeof MediaRecorder === "undefined") {
+        setError("Recording is not supported by this browser.");
+        return;
+      }
+      setError(null);
+      chunksRef.current = [];
+      transcriptionChunksRef.current = [];
+      const requestedMode = mode;
+      const recordingId = crypto.randomUUID();
+      const preferredMimes =
+        requestedMode === "video"
+          ? ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"]
+          : ["audio/webm;codecs=opus", "audio/webm"];
+      const mime = preferredMimes.find((candidate) =>
+        MediaRecorder.isTypeSupported(candidate)
+      );
+      let rec: MediaRecorder;
+      try {
+        rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      } catch {
+        setError("This browser could not start a recording with the selected device.");
+        return;
+      }
+      recorderRef.current = rec;
+      let transcriptionAudioPromise: Promise<Blob | null> = Promise.resolve(null);
+      let resolveTranscriptionAudio: (blob: Blob | null) => void = () => {};
+      let transcriptionAudioUnavailable = false;
+
+      if (requestedMode === "video") {
+        const audioTracks = stream.getAudioTracks();
+        if (audioTracks.length === 0) {
+          transcriptionAudioUnavailable = true;
+        } else {
+          try {
+            const audioRecorder = new MediaRecorder(new MediaStream(audioTracks));
+            transcriptionChunksRef.current = [];
+            transcriptionAudioPromise = new Promise((resolve) => {
+              resolveTranscriptionAudio = resolve;
+            });
+            audioRecorder.ondataavailable = (event) => {
+              if (event.data.size > 0) {
+                transcriptionChunksRef.current.push(event.data);
+              }
+            };
+            audioRecorder.onstop = () => {
+              const type = audioRecorder.mimeType || "audio/webm";
+              resolveTranscriptionAudio(
+                transcriptionChunksRef.current.length > 0
+                  ? new Blob(transcriptionChunksRef.current, { type })
+                  : null,
+              );
+            };
+            audioRecorder.onerror = () => resolveTranscriptionAudio(null);
+            audioRecorder.start(250);
+            transcriptionRecorderRef.current = audioRecorder;
+          } catch {
+            transcriptionAudioUnavailable = true;
+            resolveTranscriptionAudio(null);
+          }
+        }
+      }
+
+      rec.ondataavailable = (event) => {
+        if (event.data.size > 0) chunksRef.current.push(event.data);
+      };
+      rec.onstop = async () => {
+        if (
+          transcriptionRecorderRef.current &&
+          transcriptionRecorderRef.current.state !== "inactive"
+        ) {
+          transcriptionRecorderRef.current.stop();
+        }
+        transcriptionRecorderRef.current = null;
+        const type =
+          rec.mimeType ||
+          (requestedMode === "video" ? "video/webm" : "audio/webm");
+        const blob = new Blob(chunksRef.current, { type });
+        const transcriptionAudio =
+          requestedMode === "voice" ? blob : await transcriptionAudioPromise;
+        const url = URL.createObjectURL(blob);
+        setRecordings((prev) => [
+          {
+            id: recordingId,
+            url,
+            blob,
+            mode: requestedMode,
+            duration: Math.floor(
+              (Date.now() - startTimeRef.current) / 1000,
+            ),
+            createdAt: new Date(),
+            ...(transcriptionAudio ? { transcriptionAudio } : {}),
+            ...(transcriptionAudioUnavailable ||
+            (requestedMode === "video" && !transcriptionAudio)
+              ? { transcriptionAudioUnavailable: true }
+              : {}),
+          },
+          ...prev,
+        ]);
+        recorderRef.current = null;
+        recordingStartRef.current = false;
+        setIsRecording(false);
+        setIsPaused(false);
+        clearTimer();
+      };
+      rec.onerror = () => {
+        setError(
+          "The browser encountered an error while recording. Try starting a new moment.",
+        );
+        if (
+          transcriptionRecorderRef.current &&
+          transcriptionRecorderRef.current.state !== "inactive"
+        ) {
+          transcriptionRecorderRef.current?.stop();
+        }
+        recorderRef.current = null;
+        recordingStartRef.current = false;
+        setIsRecording(false);
+        setIsPaused(false);
+        clearTimer();
+      };
+      startTimeRef.current = Date.now();
+      elapsedBaseRef.current = 0;
+      try {
+        rec.start(250);
+        recordingStarted = true;
+        setIsRecording(true);
+        setIsPaused(false);
+        setElapsed(0);
+        startTimer();
+      } catch {
+        recorderRef.current = null;
+        if (
+          transcriptionRecorderRef.current &&
+          transcriptionRecorderRef.current.state !== "inactive"
+        ) {
+          transcriptionRecorderRef.current?.stop();
+        }
+        setError(
+          "The browser could not begin recording. Check the selected device and try again.",
+        );
+      }
+    } finally {
+      if (!recordingStarted) recordingStartRef.current = false;
     }
   };
 
   const stopRecording = () => {
-    recorderRef.current?.stop();
-    recorderRef.current = null;
-    setIsRecording(false);
-    setIsPaused(false);
-    clearTimer();
+    const recorder = recorderRef.current;
+    if (!recorder || recorder.state === "inactive") {
+      recordingStartRef.current = false;
+      setIsRecording(false);
+      setIsPaused(false);
+      clearTimer();
+      return;
+    }
+    if (
+      transcriptionRecorderRef.current &&
+      transcriptionRecorderRef.current.state !== "inactive"
+    ) {
+      transcriptionRecorderRef.current?.stop();
+    }
+    transcriptionRecorderRef.current = null;
+    recorder.stop();
   };
 
   const pauseRecording = () => {
@@ -231,6 +364,13 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
     const rec = recorderRef.current;
     if (rec && rec.state === "recording" && typeof rec.pause === "function") {
       rec.pause();
+    }
+    const transcriptionRecorder = transcriptionRecorderRef.current;
+    if (
+      transcriptionRecorder?.state === "recording" &&
+      typeof transcriptionRecorder.pause === "function"
+    ) {
+      transcriptionRecorder.pause();
     }
     elapsedBaseRef.current = Math.floor((Date.now() - startTimeRef.current) / 1000);
     setElapsed(elapsedBaseRef.current);
@@ -244,6 +384,13 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
     const rec = recorderRef.current;
     if (rec && rec.state === "paused" && typeof rec.resume === "function") {
       rec.resume();
+    }
+    const transcriptionRecorder = transcriptionRecorderRef.current;
+    if (
+      transcriptionRecorder?.state === "paused" &&
+      typeof transcriptionRecorder.resume === "function"
+    ) {
+      transcriptionRecorder.resume();
     }
     startTimeRef.current = Date.now() - elapsedBaseRef.current * 1000;
     startTimer();

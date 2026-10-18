@@ -902,15 +902,14 @@ select:focus-visible {
   gap: 8px;
 }
 
-.feedback-correction span:first-child {
+.grammar-word-deleted {
   color: #e89d88;
   text-decoration: line-through;
   text-decoration-color: rgba(232, 157, 136, 0.58);
 }
 
-.feedback-correction strong {
+.grammar-word-added {
   color: #a7d6bf;
-  font-weight: 500;
 }
 
 .feedback-tip {
@@ -1045,6 +1044,59 @@ select:focus-visible {
   font-weight: 400;
 }
 
+.feedback-mode-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.feedback-mode-toggle button {
+  min-width: 0;
+  min-height: 43px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: #c7cec7;
+  background: #101411;
+  font-size: 10px;
+  line-height: 1.2;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.feedback-mode-toggle button:hover:not(:disabled) {
+  border-color: rgba(157, 215, 201, 0.35);
+  background: #151b17;
+  color: #f2f4ee;
+}
+
+.feedback-mode-toggle button.feedback-mode-active {
+  border-color: rgba(157, 215, 201, 0.48);
+  background: rgba(157, 215, 201, 0.09);
+  color: #e6f4ed;
+}
+
+.feedback-mode-toggle button:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.feedback-mode-toggle button small {
+  display: block;
+  color: #89958c;
+  font-size: 8px;
+  line-height: 1.25;
+}
+
 .feedback-slider {
   padding: 0 1px;
 }
@@ -1080,6 +1132,13 @@ select:focus-visible {
   color: #818981;
   font-size: 8px;
   line-height: 1.45;
+}
+
+.feedback-privacy-note {
+  margin: 5px 0 0;
+  color: #68736b;
+  font-size: 7px;
+  line-height: 1.4;
 }
 
 .transcript-footer {
