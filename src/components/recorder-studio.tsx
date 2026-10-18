@@ -299,7 +299,7 @@ export function RecorderStudio() {
                     ))}
                   </div>
                   <p className="voice-stage-caption">
-                    {isPaused ? "A quiet pause" : isRecording ? "Listening to your story" : "A voice note, whenever you’re ready"}
+                    {isPaused ? "A quiet pause" : isRecording ? "Speak freely. Expression > accuracy" : "What would you like to talk about today?"}
                   </p>
                   {!streamActive && !isRecording && (
                     <button type="button" className="voice-enable" onClick={() => void startPreview("voice")}>
@@ -335,8 +335,8 @@ export function RecorderStudio() {
                     {mode === "video" ? <Video size={17} /> : <AudioLines size={17} />}
                   </span>
                   <span>
-                    <strong>{isRecording ? (isPaused ? "Paused" : "You’re recording") : "A moment worth keeping"}</strong>
-                    <small>{mode === "video" ? "Video and your voice, together" : "Just your voice, nothing else"}</small>
+                    <strong>{isRecording ? (isPaused ? "Paused" : "You’re recording") : "Grasp the authentic thoughts"}</strong>
+                    <small>{mode === "video" ? "Video and voice" : "Voice only"}</small>
                   </span>
                 </div>
                 <div className="record-controls">
