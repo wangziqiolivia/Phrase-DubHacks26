@@ -41,7 +41,7 @@ export function AssistantChat() {
     {
       id: "welcome",
       role: "assistant",
-      text: "Hi — I'm your Capture Studio assistant. Ask how recording works, or use the mic to ask by voice. Your take is safe while you're here.",
+      text: "Hi there! I'm here to answer any questions you have. Just talk in any language you prefer. Feel free to ask follow up questions!",
     },
   ]);
   const [draft, setDraft] = useState("");
@@ -163,10 +163,10 @@ export function AssistantChat() {
             </div>
             <div>
               <p className="text-xs font-medium uppercase tracking-widest text-zinc-500">
-                Language assistant
+                Personal language tutor
               </p>
               <h1 className="text-lg font-semibold tracking-tight">
-                Say it more naturally
+                Ask anything here! The recording is paused.
               </h1>
             </div>
           </div>
