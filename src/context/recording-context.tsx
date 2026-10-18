@@ -11,6 +11,15 @@ import {
 } from "react";
 
 export type Mode = "video" | "voice";
+export const PRACTICE_LANGUAGES = [
+  { name: "English", locale: "en-US" },
+  { name: "Spanish", locale: "es-ES" },
+  { name: "French", locale: "fr-FR" },
+  { name: "Japanese", locale: "ja-JP" },
+] as const;
+export type PracticeLanguage = (typeof PRACTICE_LANGUAGES)[number]["name"];
+
+const PRACTICE_LANGUAGE_STORAGE_KEY = "lived-practice-language";
 
 export interface Recording {
   id: string;
@@ -28,6 +37,8 @@ export interface Recording {
 interface RecordingContextValue {
   mode: Mode;
   setMode: (mode: Mode) => void;
+  practiceLanguage: PracticeLanguage;
+  setPracticeLanguage: (language: PracticeLanguage) => void;
   isRecording: boolean;
   isPaused: boolean;
   elapsed: number;
@@ -57,6 +68,9 @@ export function useRecording() {
 
 export function RecordingProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<Mode>("video");
+  const [practiceLanguage, setPracticeLanguage] =
+    useState<PracticeLanguage>("English");
+  const [practiceLanguageLoaded, setPracticeLanguageLoaded] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -80,6 +94,25 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
   const rafRef = useRef<number | null>(null);
   const startTimeRef = useRef(0);
   const elapsedBaseRef = useRef(0);
+
+  useEffect(() => {
+    const storedLanguage = window.localStorage.getItem(
+      PRACTICE_LANGUAGE_STORAGE_KEY,
+    );
+    const savedLanguage = PRACTICE_LANGUAGES.find(
+      (language) => language.name === storedLanguage,
+    );
+    if (savedLanguage) setPracticeLanguage(savedLanguage.name);
+    setPracticeLanguageLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!practiceLanguageLoaded) return;
+    window.localStorage.setItem(
+      PRACTICE_LANGUAGE_STORAGE_KEY,
+      practiceLanguage,
+    );
+  }, [practiceLanguage, practiceLanguageLoaded]);
 
   const stopStream = useCallback(() => {
     previewRequestIdRef.current += 1;
@@ -435,6 +468,8 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
       value={{
         mode,
         setMode,
+        practiceLanguage,
+        setPracticeLanguage,
         isRecording,
         isPaused,
         elapsed,

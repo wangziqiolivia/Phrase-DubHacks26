@@ -22,7 +22,11 @@ import {
   Waves,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useRecording, type Mode } from "@/context/recording-context";
+import {
+  PRACTICE_LANGUAGES,
+  useRecording,
+  type Mode,
+} from "@/context/recording-context";
 import {
   diffGrammarCorrection,
   isGrammarCorrection,
@@ -33,13 +37,6 @@ import {
   MAX_TRANSCRIPTION_DURATION_SECONDS,
 } from "../lib/audio-transcription";
 import { cn, formatTime } from "@/lib/utils";
-
-const LANGUAGES = [
-  { name: "English", locale: "en-US" },
-  { name: "Spanish", locale: "es-ES" },
-  { name: "French", locale: "fr-FR" },
-  { name: "Japanese", locale: "ja-JP" },
-];
 
 const DEMO_FEEDBACK = {
   original: "scenes",
@@ -89,6 +86,8 @@ export function RecorderStudio() {
   const {
     mode,
     setMode,
+    practiceLanguage,
+    setPracticeLanguage,
     isRecording,
     isPaused,
     elapsed,
@@ -107,7 +106,10 @@ export function RecorderStudio() {
     stopPreview,
     updateRecordingTranscript,
   } = useRecording();
-  const [language, setLanguage] = useState(LANGUAGES[0]);
+  const language =
+    PRACTICE_LANGUAGES.find(
+      (candidate) => candidate.name === practiceLanguage,
+    ) ?? PRACTICE_LANGUAGES[0];
   const [feedbackMode, setFeedbackMode] = useState<"after-stop" | "real-time">(
     "after-stop",
   );
@@ -591,15 +593,15 @@ export function RecorderStudio() {
               <select
                 value={language.name}
                 onChange={(event) => {
-                  const next = LANGUAGES.find(
+                  const next = PRACTICE_LANGUAGES.find(
                     (item) => item.name === event.target.value,
                   );
-                  if (next) setLanguage(next);
+                  if (next) setPracticeLanguage(next.name);
                 }}
                 disabled={isRecording}
                 aria-label="Language to practice"
               >
-                {LANGUAGES.map((item) => (
+                {PRACTICE_LANGUAGES.map((item) => (
                   <option key={item.name}>{item.name}</option>
                 ))}
               </select>
