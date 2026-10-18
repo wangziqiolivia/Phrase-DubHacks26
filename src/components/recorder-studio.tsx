@@ -206,8 +206,8 @@ export function RecorderStudio() {
         <Link href="/" aria-label="Lived home" className="brand-lockup">
           <span className="brand-mark"><AudioWaveform aria-hidden /></span>
           <span>
-            <span className="brand-name">lived</span>
-            <span className="brand-caption">A language journal</span>
+            <span className="brand-name">Phrase</span>
+            <span className="brand-caption">Learn a new language in a natural way.</span>
           </span>
         </Link>
 
