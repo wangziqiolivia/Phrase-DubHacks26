@@ -16,6 +16,10 @@ interface ChatMessage {
   text: string;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 type SpeechRecognitionCtor = new () => SpeechRecognition;
 
 function getSpeechRecognition(): SpeechRecognitionCtor | null {
@@ -60,7 +64,10 @@ export function AssistantChat() {
   }, []);
 
   useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
+    listRef.current?.scrollTo({
+      top: listRef.current.scrollHeight,
+      behavior: "smooth",
+    });
   }, [messages]);
 
   const sendMessage = useCallback(
@@ -87,21 +94,45 @@ export function AssistantChat() {
           }),
         });
 
-        const data = (await response.json()) as {
-          reply?: string;
-          error?: string;
-        };
-
-        if (!response.ok) {
-          throw new Error(data.error ?? "The assistant request failed.");
+        const contentType = response.headers.get("content-type") ?? "";
+        if (!contentType.includes("application/json")) {
+          throw new Error(
+            `Language help service returned an unexpected response (HTTP ${response.status}). Please try again shortly.`,
+          );
         }
+
+        const data: unknown = await response.json();
+        if (!response.ok) {
+          const message =
+            isRecord(data) &&
+            "error" in data &&
+            typeof data.error === "string"
+              ? data.error
+              : "The assistant request failed.";
+          throw new Error(message);
+        }
+
+        if (
+          !isRecord(data) ||
+          !("reply" in data) ||
+          typeof data.reply !== "string"
+        ) {
+          const error =
+            isRecord(data) &&
+            "error" in data &&
+            typeof data.error === "string"
+              ? data.error
+              : "The assistant returned an invalid response.";
+          throw new Error(error);
+        }
+        const reply = data.reply;
 
         setMessages((prev) => [
           ...prev,
           {
             id: crypto.randomUUID(),
             role: "assistant",
-            text: data.reply ?? "I couldn't create a reply. Please try again.",
+            text: reply,
           },
         ]);
       } catch (caught) {
@@ -304,16 +335,18 @@ export function AssistantChat() {
 
               <form
                 className="flex items-end gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void sendMessage(draft);
-              }}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void sendMessage(draft);
+                }}
               >
                 <button
                   type="button"
                   disabled={!voiceSupported || isSending}
                   onClick={toggleVoice}
-                  aria-label={listening ? "Stop voice input" : "Start voice input"}
+                  aria-label={
+                    listening ? "Stop voice input" : "Start voice input"
+                  }
                   aria-pressed={listening}
                   className={cn(
                     buttonVariants({
@@ -337,7 +370,11 @@ export function AssistantChat() {
                   }
                   className="max-h-32 min-h-10 flex-1 resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-zinc-950"
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey && !isSending) {
+                    if (
+                      event.key === "Enter" &&
+                      !event.shiftKey &&
+                      !isSending
+                    ) {
                       event.preventDefault();
                       void sendMessage(draft);
                     }
