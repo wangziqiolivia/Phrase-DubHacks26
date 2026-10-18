@@ -22,6 +22,7 @@ import {
   Waves,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SceneFeedbackPanel } from "@/components/scene-feedback-panel";
 import {
   PRACTICE_LANGUAGES,
   useRecording,
@@ -883,7 +884,7 @@ export function RecorderStudio() {
             </div>
 
             <div
-              className="transcript-content"
+              className="transcript-content" tabIndex={0} role="region" aria-label="Transcript and feedback"
               aria-live="polite"
               aria-atomic="false"
             >
@@ -1143,6 +1144,12 @@ export function RecorderStudio() {
                   )}
                 </div>
               )}
+            <SceneFeedbackPanel
+              recording={recordings[0]}
+              isRecording={isRecording}
+              transcriptionStatus={transcriptionStatus}
+              language={recordings[0]?.language ?? language.name}
+            />
             </div>
 
             {transcriptionError && (
@@ -1390,7 +1397,7 @@ export function RecorderStudio() {
           <span>
             Everything here is temporary. Recordings stay in this browser
             session; audio is sent to Perceptron for transcription, and
-            transcript text is sent for grammar feedback when enabled.
+            transcript text is sent for grammar feedback when enabled. After video recording, up to six screenshots are also sent for scene-based language suggestions. Point the camera at what you want to describe.
           </span>
         </footer>
       </main>
