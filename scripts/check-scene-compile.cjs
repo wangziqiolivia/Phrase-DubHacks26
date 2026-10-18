@@ -6,7 +6,8 @@ const { transform, loadBindings } = require(path.join(project, 'node_modules/nex
 const { getLoaderSWCOptions } = require(path.join(project, 'node_modules/next/dist/build/swc/options'));
 async function main() {
   await loadBindings();
-  const filename = path.join(project, 'src/app/api/scene/route.ts');
+  for (const route of ['src/app/api/scene/route.ts', 'src/app/api/scene/video/route.ts']) {
+  const filename = path.join(project, route);
   const source = fs.readFileSync(filename, 'utf8');
   for (const bundleLayer of ['rsc', 'app-pages-browser']) {
     const options = getLoaderSWCOptions({
@@ -19,6 +20,7 @@ async function main() {
     });
     await transform(source, { ...options, filename });
   }
-  console.log('Scene route compiled with Next.js SWC and Cache Components enabled (server and browser layers).');
+  }
+  console.log('Scene routes compiled with Next.js SWC and Cache Components enabled (server and browser layers).');
 }
 main().catch((error) => { console.error(String(error)); process.exitCode = 1; });

@@ -1145,11 +1145,16 @@ export function RecorderStudio() {
                 </div>
               )}
             <SceneFeedbackPanel
-              recording={recordings[0]}
-              isRecording={isRecording}
-              transcriptionStatus={transcriptionStatus}
-              language={recordings[0]?.language ?? language.name}
-            />
+                recording={recordings[0]}
+                mode={mode}
+                feedbackMode={feedbackMode}
+                isRecording={isRecording}
+                isPaused={isPaused}
+                videoRef={videoRef}
+                liveTranscript={[transcript, interimTranscript].filter(Boolean).join(" ")}
+                transcriptionStatus={transcriptionStatus}
+                language={isRecording ? language.name : recordings[0]?.language ?? language.name}
+              />
             </div>
 
             {transcriptionError && (
@@ -1196,7 +1201,7 @@ export function RecorderStudio() {
                   }}
                 >
                   After recording
-                  <small>Perceptron transcription</small>
+                  <small>{mode === "video" ? "Full-video analysis" : "Audio transcription"}</small>
                 </button>
                 <button
                   type="button"
@@ -1211,18 +1216,26 @@ export function RecorderStudio() {
                   }}
                 >
                   Real-time
-                  <small>Browser transcription</small>
+                  <small>{mode === "video" ? "Images every 0.5s" : "Browser transcription"}</small>
                 </button>
               </div>
               <p className="feedback-description">
                 {feedbackMode === "after-stop"
-                  ? "Perceptron transcribes your audio and checks your grammar after you finish recording."
-                  : "Browser speech recognition transcribes live; grammar suggestions follow each spoken phrase."}
+                  ? mode === "video"
+                    ? "After you stop, your complete video and transcript are sent to Perceptron for scene-based language feedback."
+                    : "Perceptron transcribes your audio and checks your grammar after recording."
+                  : mode === "video"
+                    ? "Camera images are captured every 0.5 seconds and sent in recent batches. Browser transcription supplies your words."
+                    : "Browser speech recognition transcribes live; grammar suggestions follow each spoken phrase."}
               </p>
               <p className="feedback-privacy-note">
-                {feedbackMode === "after-stop"
-                  ? "Your audio is sent to Perceptron for transcription. Grammar feedback uses the transcript."
-                  : "Live transcription uses your browser. Grammar feedback sends recognized text to Perceptron."}
+                {mode === "video"
+                  ? feedbackMode === "after-stop"
+                    ? "The full video is uploaded for analysis (up to 20 MiB). Audio is also sent for transcription. Nothing is written to MongoDB by this feature."
+                    : "Camera images and recognized speech are sent while recording. When analysis is slower, only recent frames are retained; results are not instantaneous."
+                  : feedbackMode === "after-stop"
+                    ? "Your audio is sent for transcription; recognized text is sent for grammar feedback."
+                    : "Live transcription uses your browser; recognized text is sent for grammar feedback."}
               </p>
             </div>
 
@@ -1395,9 +1408,7 @@ export function RecorderStudio() {
         <footer className="studio-note">
           <RotateCcw size={13} />
           <span>
-            Everything here is temporary. Recordings stay in this browser
-            session; audio is sent to Perceptron for transcription, and
-            transcript text is sent for grammar feedback when enabled. After video recording, up to six screenshots are also sent for scene-based language suggestions. Point the camera at what you want to describe.
+            Recordings are kept locally for this session. The selected feedback mode sends audio, video, camera images or recognized text to Perceptron for analysis. Point the camera at what you want to describe.
           </span>
         </footer>
       </main>

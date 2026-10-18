@@ -1,7 +1,11 @@
 export const MAX_SCENE_BODY_BYTES = 2 * 1024 * 1024;
 export const MAX_FRAME_BYTES = 250 * 1024;
 export const MAX_SCENE_TEXT_LENGTH = 4000;
-export const MAX_SCENE_DURATION_SECONDS = 450;
+export const MAX_VIDEO_BYTES = 20 * 1024 * 1024;
+export const MAX_VIDEO_BODY_BYTES = MAX_VIDEO_BYTES + 64 * 1024;
+export const LIVE_FRAME_INTERVAL_MS = 500;
+export const LIVE_BATCH_FRAMES = 4;
+export const MAX_PENDING_FRAMES = 6;
 
 export interface SceneFrame {
   timestamp_ms: number;
@@ -36,7 +40,7 @@ export function isSceneRequest(value: unknown): value is SceneRequest {
   return value.frames.every((frame: unknown) => {
     if (!isObject(frame) || typeof frame.timestamp_ms !== "number" ||
       !Number.isInteger(frame.timestamp_ms) || frame.timestamp_ms < previous ||
-      frame.timestamp_ms < 0 || frame.timestamp_ms > MAX_SCENE_DURATION_SECONDS * 1000 ||
+      frame.timestamp_ms < 0 || !Number.isSafeInteger(frame.timestamp_ms) ||
       typeof frame.image_url !== "string" ||
       frame.image_url.length > Math.ceil(MAX_FRAME_BYTES / 3) * 4 + 23 ||
       !/^data:image\/jpeg;base64,(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(frame.image_url)) return false;
@@ -56,14 +60,6 @@ export function isSceneFeedback(value: unknown): value is SceneFeedback {
   ) && typeof value.visual_context_available === "boolean" &&
     Array.isArray(value.useful_phrases) && value.useful_phrases.length <= 3 &&
     value.useful_phrases.every((phrase: unknown) => typeof phrase === "string" && phrase.trim().length > 0 && phrase.length <= 200);
-}
-
-export function sampleTimes(duration: number): number[] {
-  if (!Number.isFinite(duration) || duration <= 0 || duration > MAX_SCENE_DURATION_SECONDS) {
-    throw new Error("Scene analysis supports videos up to 7 minutes 30 seconds.");
-  }
-  const count = Math.min(6, Math.max(2, Math.ceil(duration / 5)));
-  return Array.from({ length: count }, (_, index) => duration * (index + 0.5) / count);
 }
 
 export const SCENE_RESPONSE_SCHEMA = {

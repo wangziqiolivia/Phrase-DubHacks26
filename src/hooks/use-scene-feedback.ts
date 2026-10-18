@@ -2,26 +2,16 @@
 
 import { useEffect, useState } from "react";
 import type { Recording } from "@/context/recording-context";
-import { extractVideoFrames } from "@/lib/video-frames";
-import { isSceneFeedback, MAX_SCENE_TEXT_LENGTH, type SceneFeedback } from "@/lib/scene-feedback";
-
-type SceneState = {
-  key: string;
-  status: "preparing" | "analyzing" | "complete" | "error";
-  feedback?: SceneFeedback;
-  error?: string;
-  frameCount?: number;
-};
+import { isSceneFeedback, MAX_SCENE_TEXT_LENGTH, MAX_VIDEO_BYTES } from "@/lib/scene-feedback";
+import type { SceneState } from "./use-live-scene-feedback";
 
 export function useSceneFeedback(recording: Recording | undefined, ready: boolean, language: string) {
   const [attempt, setAttempt] = useState(0);
-  const [state, setState] = useState<SceneState | null>(null);
-  const id = recording?.id;
-  const mode = recording?.mode;
+  const [state, setState] = useState<(SceneState & { key: string }) | null>(null);
   const blob = recording?.blob;
   const text = recording?.transcript ?? "";
-  const key = JSON.stringify([id, text, language, attempt]);
-  const enabled = ready && mode === "video" && !!blob;
+  const key = JSON.stringify([recording?.id, text, language, attempt]);
+  const enabled = ready && recording?.mode === "video" && !!blob;
 
   useEffect(() => {
     if (!enabled || !blob) return;
@@ -29,25 +19,23 @@ export function useSceneFeedback(recording: Recording | undefined, ready: boolea
     setState({ key, status: "preparing" });
     void (async () => {
       try {
-        if (text.length > MAX_SCENE_TEXT_LENGTH) throw new Error("Scene feedback supports transcripts up to 4000 characters. Your full transcript is preserved.");
-        const frames = await extractVideoFrames(blob, controller.signal);
-        controller.signal.throwIfAborted();
-        setState({ key, status: "analyzing", frameCount: frames.length });
-        const response = await fetch("/api/scene", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, language, frames }),
-          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(70_000)]),
+        if (!blob.size || blob.size > MAX_VIDEO_BYTES) throw new Error("Full-video analysis supports recordings under 20 MiB. Your video is still available locally.");
+        if (text.length > MAX_SCENE_TEXT_LENGTH) throw new Error("Video feedback supports transcripts up to 4000 characters. Your full transcript is preserved.");
+        const form = new FormData();
+        const mime = blob.type.split(";")[0];
+        form.set("video", new Blob([blob], { type: mime }), mime === "video/mp4" ? "recording.mp4" : "recording.webm");
+        form.set("text", text); form.set("language", language);
+        setState({ key, status: "analyzing" });
+        const response = await fetch("/api/scene/video", {
+          method: "POST", body: form,
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(120_000)]),
         });
         const result: unknown = await response.json();
-        if (!response.ok) {
-          const message = typeof result === "object" && result !== null && "error" in result && typeof result.error === "string"
-            ? result.error : "Scene analysis could not finish. Please retry.";
-          throw new Error(message);
-        }
-        if (!isSceneFeedback(result)) throw new Error("Scene analysis returned invalid feedback. Please retry.");
-        if (!controller.signal.aborted) setState({ key, status: "complete", feedback: result, frameCount: frames.length });
+        if (!response.ok) throw new Error(typeof result === "object" && result !== null && "error" in result && typeof result.error === "string" ? result.error : "Video analysis could not finish. Please retry.");
+        if (!isSceneFeedback(result)) throw new Error("Video analysis returned invalid feedback. Please retry.");
+        if (!controller.signal.aborted) setState({ key, status: "complete", feedback: result, hasTranscript: !!text.trim() });
       } catch (cause) {
-        if (!controller.signal.aborted) setState({ key, status: "error", error: cause instanceof Error ? cause.message : "Scene analysis could not finish. Please retry." });
+        if (!controller.signal.aborted) setState({ key, status: "error", error: cause instanceof Error ? cause.message : "Video analysis could not finish. Please retry." });
       }
     })();
     return () => controller.abort();
