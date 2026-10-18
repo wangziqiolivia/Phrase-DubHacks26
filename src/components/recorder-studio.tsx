@@ -223,9 +223,9 @@ export function RecorderStudio() {
       <main className="studio-main">
         <section className="studio-intro">
           <div>
-            <p className="eyebrow">YOUR EVERYDAY, IN ANOTHER LANGUAGE</p>
-            <h1>Keep a little of today.</h1>
-            <p className="intro-copy">Speak freely. The learning can come after.</p>
+            <p className="eyebrow">Learn in practice.</p>
+            <h1>Learn a new language effortlessly.</h1>
+            <p className="intro-copy">No boring textbooks. Specially made for beginners.</p>
           </div>
           <label className="language-picker">
             <span>Practicing</span>
