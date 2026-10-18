@@ -267,8 +267,8 @@ export function RecorderStudio() {
                       </div>
                       <div className="camera-welcome-content">
                         <span className="welcome-icon"><Video size={18} /></span>
-                        <p className="stage-overline">A MOMENT, JUST AS IT IS</p>
-                        <h2>Your view will find its way here.</h2>
+                        <p className="stage-overline">Daily life | self-reflections</p>
+                        <h2>Record anything you want to say.</h2>
                         <p>Turn on your camera when you’re ready. Nothing starts until you are.</p>
                         <Button
                           variant="outline"

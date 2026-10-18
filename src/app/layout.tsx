@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "lived — A language journal",
+  title: "lived — Help you learn a language like a toddler.",
   description:
-    "A quiet space to record everyday moments, practice a language, and revisit your words.",
+    "Start talking and learn in the process. No more boring textbooks.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
