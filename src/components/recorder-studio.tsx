@@ -574,7 +574,7 @@ export function RecorderStudio() {
           </span>
           <Link href="/assistant" className="help-link">
             <CircleHelp size={16} aria-hidden />
-            <span>How it works</span>
+            <span>pause and ask personal tutor</span>
           </Link>
         </div>
       </header>
